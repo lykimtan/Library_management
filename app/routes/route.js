@@ -50,27 +50,29 @@ router.put('/reader/:id', readerController.updateInfo);
 router.put('/reader/:id/password', readerController.changePassword);
 router.post('/reader/login', readerController.login);
 router.delete('/reader/:id', readerController.delete);
+router.get('/reader/payfine/:id', readerController.payFine);
 
 //router library service
 router.route('/libraryService')
   .post(libraryServiceController.borrowRequest)
   .get(libraryServiceController.findAllBorrowRequests);
 
-
-router.route('/libraryService/:id')
-  .get(libraryServiceController.findBorrowRequestById)
-  .delete(libraryServiceController.deleteBorrowRequest)
-  
 router.route('/libraryService/approve') 
   .put(libraryServiceController.approveRequest);
 router.route('/libraryService/rejected')
   .put(libraryServiceController.rejectRequest);
 router.route('/libraryService/status/:status') 
   .get(libraryServiceController.findRequestByStatus)
+router.route('/libraryService/return') 
+  .put(libraryServiceController.returnBook);
+router.route('/libraryService/lost') 
+  .put(libraryServiceController.lostBook);
 
 
-
-
+router.route('/libraryService/:id')
+  .get(libraryServiceController.findBorrowRequestById)
+  .delete(libraryServiceController.deleteBorrowRequest)
+  
 
 
 

@@ -39,11 +39,19 @@ class LibraryService {
         if (!book || book.soquyen === 0) {
             throw new Error("Book is not available for borrowing");
         }
+
   
         
         const reader = await this.readerService.findById(readerId);
         if (!reader) {
             throw new Error("Reader not found");
+        }
+
+        if(reader.fine > 0) {
+            throw new Error("You must pay your fine before borrowing a book");
+        }
+        if(reader.point <= 0) {
+            throw new Error("You cannot borrow books because your point is very low");
         }
 
         // Create borrow request data
@@ -57,7 +65,6 @@ class LibraryService {
 
         // Insert borrow request into the library collection
         const result = await this.libraryService.insertOne(borrowData);
-        const updateQuantity = await this.bookService.updateQuantity(bookId, -1 );
         if (!result.acknowledged) {
             throw new Error("Failed to create borrow request");
         }
@@ -65,7 +72,6 @@ class LibraryService {
         return {
             _id: result.insertedId,
             ...borrowData,
-            updateQuantity
         };
 
     }
@@ -85,6 +91,22 @@ class LibraryService {
         }
         return borrowRequest;
     }
+
+    async checkReturnedLate(dateExpected, dateReturned){
+        if (!dateExpected || !dateReturned) return false;
+        const expectedDate = new Date(dateExpected);
+        const returnedDate = new Date(dateReturned);
+        return returnedDate > expectedDate;  // Trả về true nếu trả trễ
+    } 
+
+    async countDaylate(dateExpected, dateReturned){
+        if (!dateExpected || !dateReturned) return 0;
+        const expectedDate = new Date(dateExpected);
+        const returnedDate = new Date(dateReturned);
+        const diffTime = Math.abs(returnedDate - expectedDate);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays > 0 ? diffDays : 0;
+    } 
 
     async deleteBorrowRequest(id) {
         if (!ObjectId.isValid(id)) {
@@ -110,6 +132,7 @@ class LibraryService {
         }
 
         const checkBorrowId = await this.libraryService.find({_id: borrowId});
+        const borrowRequest = await this.findBorrowRequestById(borrowId);
         const checkStaff = await this.staffService.find({ _id: staffId});
         if(!checkBorrowId){
             throw new Error("BorrowId is not found");
@@ -131,7 +154,10 @@ class LibraryService {
                 updateDate: new Date()
             }
         };
-
+        const updateQuantity = await this.bookService.updateQuantity(borrowRequest.bookId, -1 );
+        if(!updateQuantity) {
+            throw new Error("Failed to update book quantity");
+        }
         const result = await this.libraryService.findOneAndUpdate(
             filter,
             update,
@@ -152,7 +178,7 @@ class LibraryService {
             throw new Error("Invalid borrowId or staffId");
         }
 
-        const checkBorrowId = await this.libraryService.find({_id: borrowId});
+        const checkBorrowId = await this.findBorrowRequestById(borrowId);
         const checkStaff = await this.staffService.find({ _id: staffId});
         if(!checkBorrowId){
             throw new Error("BorrowId is not found");
@@ -187,6 +213,68 @@ class LibraryService {
 
         return result;
 
+    }
+
+    //returnbook
+
+    async returnBook(borrowId, returnStaffId) {
+        const filter = {
+            _id: new ObjectId(borrowId),
+            status: "approved"
+        }
+
+        const update = {
+            $set: {
+                returnStaffId: new ObjectId(returnStaffId),
+                returnDate: new Date(),
+                updateDate: new Date(),
+                status: "returned"
+            }
+        }
+        const result = await this.libraryService.findOneAndUpdate(
+            filter,
+            update,
+            {returnDocument: 'after'}
+        )
+        const borrowRequest = await this.findBorrowRequestById(borrowId);
+        const bookId = borrowRequest.bookId;
+        const updateQuantity = await this.bookService.updateQuantity(bookId, +1);
+
+        //check date late
+        const isLate = await this.checkReturnedLate(borrowRequest.expectedReturnDate, borrowRequest.returnDate);
+        if(isLate) {
+            const countDateLate = await this.countDaylate(borrowRequest.expectedReturnDate, borrowRequest.returnDate);
+            const minusPoint = countDateLate * 10;
+            const readerId = borrowRequest.readerId;
+            const updateReader = await this.readerService.updatePoint(readerId, -minusPoint);
+        }
+        return result;
+    }
+
+    async lostBook(borrowId, returnStaffId) {
+        const filter = {
+            _id: new ObjectId(borrowId),
+            status: "approved"
+        }
+
+        const update = {
+            $set: {
+                returnStaffId: new ObjectId(returnStaffId),
+                status: "lost"
+            }
+        }
+        const result = await this.libraryService.findOneAndUpdate(
+            filter,
+            update,
+            {returnDocument: 'after'}
+        )
+        const borrowRequest = await this.findBorrowRequestById(borrowId);
+        const bookId = borrowRequest.bookId;
+        const book = await this.bookService.findById(bookId);
+        const fine = book.dongia * 2;
+        const updateReader = await this.readerService.updatePoint(borrowRequest.readerId, -10);
+        const updateFine = await this.readerService.updateFine(borrowRequest.readerId, +fine);
+        return result;
     }
 
 }

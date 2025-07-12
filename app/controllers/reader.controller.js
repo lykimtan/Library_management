@@ -128,3 +128,21 @@ exports.delete = async (req, res, next) => {
         return next(new ApiError(500, "An error occurred while deleting reader"));
     }
 }
+
+exports.payFine = async (req, res, next) => {
+    const readerId = req.params.id;
+    if (!readerId) {
+        return next(new ApiError(400, "Reader ID is required"));
+    }
+    try {
+        const reader = new ReaderService(MongoDB.client);
+        const document = await reader.payFine(readerId);
+        if (!document) {
+            return next(new ApiError(404, "Reader not found or fine already paid"));
+        }
+        res.status(200).json({ message: "Fine paid successfully" });
+    } catch (error) {
+        console.error("Pay Fine Error:", error);
+        return next(new ApiError(500, "An error occurred while paying fine"));
+    }
+}

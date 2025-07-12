@@ -14,7 +14,9 @@ class ReaderService {
             gender: payload.gender,
             address: payload.address,
             email: payload.email,
-            password: payload.password,
+            point: 100,
+            fine: 0,
+            password: payload.password
         };
         Object.keys(reader).forEach(
             (key) => reader[key] === undefined && delete reader[key]
@@ -78,7 +80,6 @@ class ReaderService {
         const filter = {
             _id: ObjectId.isValid(id) ? new ObjectId(id) : null,
         };
-
         const update = this.extractReaderDataForUpdate(payload);
 
         const result = await this.Reader.findOneAndUpdate(
@@ -112,6 +113,58 @@ class ReaderService {
         });
         return result;
     }
+
+    async updatePoint(readerId, delta) {
+        const result = await this.Reader.findOneAndUpdate(
+            { _id: new ObjectId(readerId) },
+            { $inc: { point: delta } },
+            { returnDocument: "after" } // trả về bản ghi sau khi cập nhật
+        );
+    
+        if (!result) {
+            throw new Error("Reader are not update point");
+        }
+    
+        return result; 
+    } 
+
+    async updateFine(readerId, delta) {
+        const result = await this.Reader.findOneAndUpdate(
+            { _id: new ObjectId(readerId) },
+            { $inc: { fine: delta } },
+            { returnDocument: "after" } // trả về bản ghi sau khi cập nhật
+        );
+    
+        if (!result) {
+            throw new Error("Reader are not update fine");
+        }
+    
+        return result; 
+    } 
+    
+    async payFine(readerId) {
+        const filter = {
+            _id: ObjectId.isValid(readerId) ? new ObjectId(readerId) : null,
+        };
+    
+        const update = {
+            $set: { fine: 0 },
+        };
+    
+        const result = await this.Reader.findOneAndUpdate(
+            filter,
+            update,
+            { returnDocument: 'after' }
+        );
+    
+        if (!result) {
+            throw new Error("Reader not found or fine not updated");
+        }
+    
+        return result;
+    }
+
+    
 }
 
 module.exports = ReaderService;
